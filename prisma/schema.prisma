@@ -33,6 +33,18 @@ model Contract {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
   fileName  String
+  fileUrl   String?
+  extractedText  String?
   status    String   @default("uploaded")
+  createdAt DateTime @default(now())
+  clauses   Clause[]
+}
+
+model Clause {
+  id        String   @id @default(cuid())
+  contractId    String
+  contract      Contract @relation(fields: [contractId], references: [id])
+  content  String
+  orderIndex   Int
   createdAt DateTime @default(now())
 }

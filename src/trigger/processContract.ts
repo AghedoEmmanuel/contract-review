@@ -2,6 +2,7 @@ import { task, logger } from "@trigger.dev/sdk/v3";
 import { PDFParse } from "pdf-parse";
 import prisma from "@/lib/prisma";
 import { extractClauses } from "@/lib/llm"
+import { analyseClauseTask } from "./analyseClause";
 
 export const processContractUpload = task({
   id: "process-contract-upload",
@@ -62,39 +63,56 @@ export const processContractUpload = task({
 
     const clauses = await extractClauses(extractedText)
 
-    logger.info("Clauses extracted", { count: clauses.length })
+    await prisma.clause.deleteMany({where:{contractId}})
 
-    // ── Step 3: Save each clause to the database ───────────────
-
-    // Delete any existing clauses first (in case of retry)
-    await prisma.clause.deleteMany({
-      where: { contractId }
-    })
-
-    // Save all clauses with their order index
-    await prisma.clause.createMany({
-      data: clauses.map((content, index) => ({
-        contractId,
-        content,
-        orderIndex: index + 1,
+    const savedClauses = await prisma.$transaction(
+      clauses.map((content,i)=>prisma.clause.create({
+        data:{contractId,content,orderIndex: i+1}
       }))
+    )
+
+    logger.info("Clauses saved", { count: savedClauses.length })
+
+    // ── Step 3: analyse all contracts in parallel ───────────────
+
+    logger.info("Starting parallel clause analysis", {
+      clauseCount: savedClauses.length
     })
-
-    logger.info("Clauses saved to database", { count: clauses.length })
-
-    // ── Step 4: Mark contract as complete ─────────────────────
 
     await prisma.contract.update({
       where: { id: contractId },
-      data: { status: "clauses_extracted" }
+      data: { status: "analysing" }
     })
 
-    logger.info("Contract processing complete", { contractId })
+    // This is the key line — fan out to all clauses simultaneously
+    const results = await analyseClauseTask.batchTriggerAndWait(
+      savedClauses.map((clause) => ({
+        payload: {
+          clauseId: clause.id,
+          content: clause.content,
+        }
+      }))
+    )
+
+    const successful = results.runs.filter(r => r.ok).length
+    const failed = results.runs.filter(r => !r.ok).length
+
+    logger.info("Parallel analysis complete", { successful, failed })
+
+    // ── Step 4: update final status ─────────────────────
+
+    await prisma.contract.update({
+      where: { id: contractId },
+      data: { status: "analysis_complete" }
+    })
+
+    logger.info("All done", { contractId })
 
     return {
       contractId,
-      pages: textResult.pages?.length ?? 0,
-      clauseCount: clauses.length
+      clauseCount: savedClauses.length,
+      successful,
+      failed,
     }
   }
 });

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import UploadForm from "@/components/UploadForm"
 import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
+import Link from "next/link"
 
 export default async function DashboardPage() {
   const session = await auth()
@@ -44,35 +45,36 @@ export default async function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {user?.contracts.map((contract) => (
-                <div
-                  key={contract.id}
-                  className="bg-white p-4 rounded-lg border flex justify-between items-center"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {contract.fileName}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(contract.createdAt).toLocaleDateString()}
-                      {contract._count.clauses > 0 && (
-                        <span className="ml-2 text-blue-600">
-                          {contract._count.clauses} clauses found
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    contract.status === "clauses_extracted"
-                      ? "bg-green-100 text-green-700"
-                      : contract.status === "extracting_clauses"
-                      ? "bg-blue-100 text-blue-700"
-                      : contract.status === "extracting"
-                      ? "bg-yellow-100 text-yellow-700"
-                      : "bg-gray-100 text-gray-700"
-                  }`}>
-                    {contract.status.replace(/_/g, " ")}
-                  </span>
-                </div>
+                <Link
+    key={contract.id}
+    href={`/dashboard/contracts/${contract.id}`}
+    className="bg-white p-4 rounded-lg border flex justify-between items-center hover:border-blue-300 transition-colors"
+  >
+    <div>
+      <p className="font-medium text-gray-900">{contract.fileName}</p>
+      <p className="text-sm text-gray-500">
+        {new Date(contract.createdAt).toLocaleDateString()}
+        {contract._count.clauses > 0 && (
+          <span className="ml-2 text-blue-600">
+            {contract._count.clauses} clauses
+          </span>
+        )}
+      </p>
+    </div>
+    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+      contract.status === "analysis_complete"
+        ? "bg-green-100 text-green-700"
+        : contract.status === "analysing"
+        ? "bg-blue-100 text-blue-700"
+        : contract.status === "extracting_clauses"
+        ? "bg-purple-100 text-purple-700"
+        : contract.status === "extracting"
+        ? "bg-yellow-100 text-yellow-700"
+        : "bg-gray-100 text-gray-700"
+    }`}>
+      {contract.status.replace(/_/g, " ")}
+    </span>
+  </Link>
               ))}
             </div>
           )}

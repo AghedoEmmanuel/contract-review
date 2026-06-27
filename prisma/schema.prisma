@@ -47,4 +47,18 @@ model Clause {
   content  String
   orderIndex   Int
   createdAt DateTime @default(now())
+  analysis  ClauseAnalysis?
 }
+
+model ClauseAnalysis {
+  id        String   @id @default(cuid())
+  clauseId    String @unique
+  clause      Clause  @relation(fields: [clauseId], references: [id])
+  riskLevel  String  //"high"|"medium"|"low"
+  riskExplanation  String
+  ambiguousLanguage  String[]
+  recommendations String[]
+  createdAt DateTime @default(now())
+}
+
+

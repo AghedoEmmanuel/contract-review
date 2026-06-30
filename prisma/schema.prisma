@@ -36,6 +36,7 @@ model Contract {
   fileUrl   String?
   extractedText  String?
   status    String   @default("uploaded")
+  reviewToken  String?
   createdAt DateTime @default(now())
   clauses   Clause[]
 }

@@ -1,8 +1,9 @@
-import { task, logger } from "@trigger.dev/sdk/v3";
+import { task, logger, wait } from "@trigger.dev/sdk/v3";
 import { PDFParse } from "pdf-parse";
 import prisma from "@/lib/prisma";
 import { extractClauses } from "@/lib/llm"
 import { analyseClauseTask } from "./analyseClause";
+import {sendReviewNotification} from "@/lib/email";
 
 export const processContractUpload = task({
   id: "process-contract-upload",
@@ -94,25 +95,102 @@ export const processContractUpload = task({
       }))
     )
 
-    const successful = results.runs.filter(r => r.ok).length
-    const failed = results.runs.filter(r => !r.ok).length
+    
 
-    logger.info("Parallel analysis complete", { successful, failed })
+    logger.info("Parallel analysis complete")
 
-    // ── Step 4: update final status ─────────────────────
+    // step 4 : Aggregate the result
+
+    const fullContract = await prisma.contract.findUniqueOrThrow({
+      where:{id: contractId},
+      include:{
+        clauses:{include:{analysis:true}},
+        user:true,
+      }
+    })
+
+    const highRiskCount = fullContract.clauses.filter( c => c.analysis?.riskLevel === "high").length
+    const mediumRiskCount = fullContract.clauses.filter( c => c.analysis?.riskLevel === "medium").length
+    const lowRiskCount = fullContract.clauses.filter( c => c.analysis?.riskLevel === "low").length
+
+    logger.info("Report aggregated",{
+      highRiskCount,
+      mediumRiskCount,
+      lowRiskCount,
+    })
+
+    await prisma.contract.update({
+      where: {id: contractId},
+      data: {status: "awaiting_review"}
+    })
+
+  
+    //step 5 : Create the waitpoint token
+
+    logger.info("Creating waitpoint token")
+
+    const token = await wait.createToken({
+      timeout: "7d",
+    })
+
+    await prisma.contract.update({
+      where: {id:contractId},
+      data: {reviewToken: token.id}
+    })
+
+    logger.info("Waitpoint token created", {tokenId: token.id})
+
+    //step 6 : send email notification
+
+    await sendReviewNotification({
+      to: fullContract.user.email,
+      contractName: fullContract.fileName,
+      contractId: fullContract.id,
+      highRiskCount,
+      mediumRiskCount,
+      lowRiskCount,
+    })
+
+    logger.info("Review notification sent", {to: fullContract.user.email})
+
+    // ── Step 7: suspend and wait for human review ─────────────────────
+
+    logger.info("Task suspending - waiting for human review")
+
+    const result = await wait.forToken<{
+      reviewedBy: string,
+      completedAt: string
+    }>(token)
+
+    // ⏸️ Execution paused here until someone calls wait.completeToken()
+    // This could be seconds, hours, or days later.
+    // When it resumes, `result.output` contains whatever data was passed in.
+
+     if (!result.ok) {
+      logger.error("Review token timed out or failed", { contractId })
+      await prisma.contract.update({
+        where: { id: contractId },
+        data: { status: "review_timed_out" }
+      })
+      return { contractId, status: "review_timed_out" }
+    }
+
+    logger.info("Review completed, task resumed", {
+      contractId,
+      reviewedBy: result.output.reviewedBy,
+    })
 
     await prisma.contract.update({
       where: { id: contractId },
-      data: { status: "analysis_complete" }
+      data: { status: "reviewed" }
     })
 
-    logger.info("All done", { contractId })
+//     logger.info("All done", { contractId })
 
     return {
       contractId,
-      clauseCount: savedClauses.length,
-      successful,
-      failed,
+      status: "reviewed",
+      reviewedBy: result.output.reviewedBy,
     }
   }
 });

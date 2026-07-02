@@ -49,6 +49,7 @@ model Clause {
   orderIndex   Int
   createdAt DateTime @default(now())
   analysis  ClauseAnalysis?
+  reviewDecision ReviewDecision?
 }
 
 model ClauseAnalysis {
@@ -62,4 +63,12 @@ model ClauseAnalysis {
   createdAt DateTime @default(now())
 }
 
+model ReviewDecision {
+  id          String   @id @default(cuid())
+  clauseId    String   @unique
+  clause      Clause   @relation(fields: [clauseId], references: [id])
+  decision    String   // "approved" | "rejected"
+  annotation  String?
+  reviewedAt  DateTime @default(now())
+}
 

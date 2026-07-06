@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node ./scripts/test-runner.js",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -15,6 +18,7 @@
     "@trigger.dev/sdk": "4.4.6",
     "@vercel/blob": "^2.5.0",
     "bcryptjs": "^3.0.3",
+    "miniflare": "^4.20260701.0",
     "next": "16.2.6",
     "next-auth": "^5.0.0-beta.31",
     "pdf-parse": "^2.4.5",
@@ -31,9 +35,12 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9",
+    "vitest-environment-miniflare": "^2.14.4"
   }
 }
